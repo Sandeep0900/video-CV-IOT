@@ -1,0 +1,171 @@
+#include <ESP8266WiFi.h>
+#include <Keypad.h>
+#include <Servo.h>
+
+// WiFi and ThingSpeak settings
+const char* ssid = "Sandeep";
+const char* password = "996070088";
+const char* apiKey = "TT3PC1L5BOFZRA60";  // API key for ThingSpeak channel "sandeep3"
+const char* server = "api.thingspeak.com";
+WiFiClient client;
+
+// Pins
+#define SERVO_PIN 15       // GPIO15 (D8 on NodeMCU)
+#define BUZZER_PIN 12      // GPIO12 (D6 on NodeMCU)
+
+// Keypad settings
+const byte ROWS = 4;
+const byte COLS = 4;
+char keys[ROWS][COLS] = {
+  {'1', '2', '3', 'A'},
+  {'4', '5', '6', 'B'},
+  {'7', '8', '9', 'C'},
+  {'*', '0', '#', 'D'}
+};
+byte rowPins[ROWS] = {16, 5, 4, 0};  // GPIO16, GPIO5, GPIO4, GPIO0 (D0, D1, D2, D3 on NodeMCU)
+byte colPins[COLS] = {2, 14, 13, 12};  // GPIO2, GPIO14, GPIO13, GPIO12 (D4, D5, D7, D6 on NodeMCU)
+
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+// Servo
+Servo myServo;
+
+// Password settings
+String correctPassword = "4"; // Set your desired password
+String inputPassword = "";
+
+// Function declarations
+void connectToWiFi();
+void sendToThingSpeak(int value);
+void handleKeypadInput(char key);
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("Serial Begin");
+
+  // Initialize pins
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);  // Buzzer off initially
+  myServo.attach(SERVO_PIN);
+  myServo.write(0);  // Set servo to initial position (0 degrees)
+
+  // Connect to WiFi
+  connectToWiFi();
+}
+
+void loop() {
+  // Check for keypad input
+  char key = keypad.getKey();
+  if (key) {
+    Serial.print("Key pressed: ");
+    Serial.println(key);
+    handleKeypadInput(key);
+  }
+
+  // Reconnect to WiFi if disconnected
+  if (WiFi.status() != WL_CONNECTED) {
+    connectToWiFi();
+  }
+}
+
+void connectToWiFi() {
+  Serial.println();
+  Serial.print("Connecting to WiFi network: ");
+  Serial.println(ssid);
+
+  WiFi.begin(ssid, password);
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
+    if (attempts > 20) {  // Retry limit
+      Serial.println("\nFailed to connect to WiFi. Restarting...");
+      ESP.restart();
+    }
+  }
+  Serial.println("\nWiFi connected successfully!");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void handleKeypadInput(char key) {
+  if (key == '*') {
+    inputPassword = "";  // Clear input if '*' is pressed
+    Serial.println("Input cleared");
+  } else if (key == '#') {
+    Serial.print("Entered Password: ");
+    Serial.println(inputPassword);
+
+    if (inputPassword == correctPassword) {
+      Serial.println("Correct Password! Door Opening...");
+      myServo.write(90);  // Turn the motor to 90 degrees
+      sendToThingSpeak(2);  // Send '2' to ThingSpeak for correct password
+
+      delay(3000);  // Wait for 3 seconds
+      myServo.write(0);  // Turn the motor back to the initial position
+      Serial.println("Door Closed");
+    } else {
+      Serial.println("Incorrect Password! Activating Buzzer...");
+      digitalWrite(BUZZER_PIN, HIGH);  // Turn on the buzzer
+      sendToThingSpeak(-3);  // Send '-3' to ThingSpeak for incorrect password
+
+      delay(1000);  // Buzzer on for 1 second
+      digitalWrite(BUZZER_PIN, LOW);  // Turn off the buzzer
+      delay(500);   // Short pause
+      digitalWrite(BUZZER_PIN, HIGH); // Turn on the buzzer again
+      delay(1000);  // Buzzer on for 1 second
+      digitalWrite(BUZZER_PIN, LOW);  // Turn off the buzzer
+      Serial.println("Buzzer Deactivated");
+    }
+    inputPassword = "";  // Clear input after processing
+  } else {
+    if (inputPassword.length() < 4) {  // Ensure the input length doesn't exceed the password length
+      inputPassword += key;  // Append key to input
+      Serial.print("Current Input: ");
+      Serial.println(inputPassword);
+    }
+  }
+}
+
+void sendToThingSpeak(int value) {
+  Serial.print("Connecting to ThingSpeak server: ");
+  Serial.println(server);
+  if (client.connect(server, 80)) {
+    Serial.println("Connected to ThingSpeak");
+
+    String postStr = "api_key=" + String(apiKey);
+    postStr += "&field1=" + String(value);  // Send value to field1
+
+    client.println("POST /update HTTP/1.1");
+    client.println("Host: " + String(server));
+    client.println("Connection: close");
+    client.println("Content-Type: application/x-www-form-urlencoded");
+    client.println("Content-Length: " + String(postStr.length()));
+    client.println();
+    client.println(postStr);
+
+    Serial.println("Data sent to ThingSpeak:");
+    Serial.println(postStr);
+
+    unsigned long timeout = millis();
+    while (client.available() == 0) {
+      if (millis() - timeout > 5000) {
+        Serial.println(">>> Client Timeout !");
+        client.stop();
+        return;
+      }
+    }
+
+    // Read response from ThingSpeak
+    while (client.available()) {
+      String line = client.readStringUntil('\r');
+      Serial.print(line);
+    }
+
+    client.stop();
+    Serial.println("\nDisconnected from ThingSpeak");
+  } else {
+    Serial.println("Failed to connect to ThingSpeak.");
+  }
+}
