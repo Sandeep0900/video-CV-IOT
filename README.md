@@ -1,4 +1,5 @@
 # Hand Gesture Controlled LED System
+![image](https://github.com/user-attachments/assets/e2f075e4-8bef-49b9-aaf8-d81e455002d6)
 
 This project demonstrates a hand gesture-controlled LED system that utilizes computer vision, Arduino, and LEDs to provide a seamless interaction between hand gestures and hardware. The project integrates Python-based hand tracking and Arduino for LED control.
 
@@ -89,8 +90,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 - [cvzone Hand Tracking Module](https://github.com/cvzone)
 - [PyFirmata Documentation](https://pyfirmata.readthedocs.io/)
-
+- 
 
 ![image](https://github.com/user-attachments/assets/e2f075e4-8bef-49b9-aaf8-d81e455002d6)
-
 ![image](https://github.com/user-attachments/assets/31e9b84f-37d7-4eac-8627-b0420b194e68)
